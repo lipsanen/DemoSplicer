@@ -66,6 +66,7 @@
     <Compile Include="ParsedDemo.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Splicer.cs" />
     <Compile Include="Test.cs" />
   </ItemGroup>
   <ItemGroup>
