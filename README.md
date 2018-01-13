@@ -5,7 +5,7 @@ A program for combining multiple Source demos into one for segmented runs.
 1. demos aren't sufficient proof for runs anyway, if they were you could also segment your run by map
 2. demos spliced using this program can be detected
 
-# TODO:
+# TODO
 Portal 2 support
 
 Fix the audio(allow sound to play through demo transitions while removing duplicate sounds from the following demo)
