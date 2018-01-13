@@ -9,6 +9,11 @@ namespace DemoSplicer
 {
 	public static class Splicer
 	{
+		/// <summary>
+		/// Parses the demos.
+		/// </summary>
+		/// <param name="orderedDemoFiles"></param>
+		/// <returns></returns>
 		static List<ParsedDemo> ParseDemos(IEnumerable<string> orderedDemoFiles)
 		{
 			List<ParsedDemo> parsedDemos = new List<ParsedDemo>();
@@ -24,6 +29,11 @@ namespace DemoSplicer
 			return parsedDemos;
 		}
 
+		/// <summary>
+		/// Gets the demo files from the commandline arguments provided.
+		/// </summary>
+		/// <param name="args"></param>
+		/// <returns></returns>
 		static List<string> GetDemoFiles(string[] args)
 		{
 			List<string> files = new List<string>();
@@ -39,6 +49,11 @@ namespace DemoSplicer
 			return files;
 		}
 
+		/// <summary>
+		/// Orders demos either based on alphabetic ordering or numeric ordering.
+		/// </summary>
+		/// <param name="files"></param>
+		/// <returns></returns>
 		static IEnumerable<string> OrderDemos(List<string> files)
 		{
 			int temp;
@@ -53,6 +68,11 @@ namespace DemoSplicer
 			}
 		}
 
+		/// <summary>
+		/// Asks the user if they want to combine the demos.
+		/// </summary>
+		/// <param name="path"></param>
+		/// <param name="parsedDemos"></param>
 		static void PromptCombineDemoFiles(string path, List<ParsedDemo> parsedDemos)
 		{
 			try
@@ -68,7 +88,11 @@ namespace DemoSplicer
 			}
 		}
 
-
+		/// <summary>
+		/// Prints information about the demos prior to starting to write them to file.
+		/// </summary>
+		/// <param name="demos"></param>
+		/// <param name="path"></param>
 		static void PrintDemoData(IEnumerable<string> demos, string path)
 		{
 			Console.WriteLine("Output path is {0}", path);

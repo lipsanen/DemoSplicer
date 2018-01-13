@@ -9,14 +9,29 @@ namespace DemoSplicer
 {
 	public struct DeltaPacket
 	{
+		/// <summary>
+		/// Tick inside the demo file
+		/// </summary>
 		public int Tick;
+		/// <summary>
+		/// Some sort of global server tick thingy
+		/// </summary>
 		public int GlobalTick;
 	}
 
 	public class DemoWriteInfo
 	{
+		/// <summary>
+		/// Should demo header be written?
+		/// </summary>
 		public bool WriteHeader { get; set; }
+		/// <summary>
+		/// Last tick to write from the demo.
+		/// </summary>
 		public int LastTick { get; set; }
+		/// <summary>
+		/// First tick to write from the demo.
+		/// </summary>
 		public int StartTick { get; set; }
 
 		public void SetFirstDemo()
@@ -192,20 +207,33 @@ namespace DemoSplicer
 			return new KeyValuePair<int, int>(packetStart, packetEnd);
 		}
 
+		/// <summary>
+		/// Inserts a console command into a demo.
+		/// </summary>
+		/// <param name="writer"></param>
+		/// <param name="tick"></param>
+		/// <param name="command"></param>
 		public static void InsertConsoleCommand(BinaryWriter writer, int tick, string command)
 		{
 			writer.Write((byte)(MessageType.ConsoleCmd));
 			writer.Write(tick);
-			command += "\0";
+			command += "\0"; // Make the string into a C-string by adding the null character
 			writer.Write(command.Length);
 			writer.Write(Encoding.ASCII.GetBytes(command));
 		}
 
-		private bool ShouldSkipMessage(int i, KeyValuePair<int,int> range, bool firstDemo)
+		/// <summary>
+		/// Should skip message?
+		/// </summary>
+		/// <param name="index"></param>
+		/// <param name="range"></param>
+		/// <param name="firstDemo"></param>
+		/// <returns></returns>
+		private bool ShouldSkipMessage(int index, KeyValuePair<int,int> range, bool firstDemo)
 		{
-			var msg = Info.Messages[i];
+			var msg = Info.Messages[index];
 
-			if (i < range.Key && !msg.IsImportantMessage)
+			if (index < range.Key && !msg.IsImportantMessage)
 				return true;
 			else if (!firstDemo && msg.Type == MessageType.Signon && !msg.ContinueDemoSignon)
 				return true;
@@ -215,6 +243,12 @@ namespace DemoSplicer
 				return false;
 		}
 
+		/// <summary>
+		/// Writes the demo message into the file.
+		/// </summary>
+		/// <param name="writer"></param>
+		/// <param name="msg"></param>
+		/// <param name="runningTick"></param>
 		public static void WriteMessage(BinaryWriter writer, DemoMessage msg, int runningTick)
 		{
 			writer.Write((byte)msg.Type);
@@ -238,6 +272,18 @@ namespace DemoSplicer
 			}
 		}
 
+		/// <summary>
+		/// Writes the demo into a stream.
+		/// </summary>
+		/// <param name="s"></param>
+		/// <param name="startTick"></param>
+		/// <param name="lastTick"></param>
+		/// <param name="firstDemo"></param>
+		/// <param name="runningTick"></param>
+		/// <param name="lastDemo"></param>
+		/// <param name="firstMapDemo"></param>
+		/// <param name="lastDemoMap"></param>
+		/// <returns></returns>
 		public int WriteToFile(Stream s, int startTick, int lastTick, bool firstDemo, int runningTick, bool lastDemo, bool firstMapDemo, bool lastDemoMap)
 		{
 			var writer = new BinaryWriter(s);
@@ -305,7 +351,7 @@ namespace DemoSplicer
 			{
 				get
 				{
-					return Packet.GetSignonType(Data) != Packet.SigOnState.None;
+					return Packet.GetSignonType(Data) != Packet.SignOnState.None;
 				}
 			}
 

@@ -93,7 +93,7 @@ namespace DemoSplicer
 			}
 		}
 
-		public static SigOnState GetSignonType(byte[] data)
+		public static SignOnState GetSignonType(byte[] data)
 		{
 			try
 			{
@@ -103,7 +103,7 @@ namespace DemoSplicer
 			}
 			catch{ }
 
-			return SigOnState.None;
+			return SignOnState.None;
 		}
 
 		public static bool HasMSGType(byte[] data, int id)
@@ -188,9 +188,9 @@ namespace DemoSplicer
 			return bb.ReadBits(32);
 		}
 
-		private static SigOnState get_signonstate(BitBuffer bb)
+		private static SignOnState get_signonstate(BitBuffer bb)
 		{
-			return (SigOnState)bb.ReadBits(8);
+			return (SignOnState)bb.ReadBits(8);
 		}
 
 		private static int is_deltapacket(BitBuffer bb)
@@ -463,7 +463,7 @@ namespace DemoSplicer
 			bb.SeekBits(b);
 		}
 
-		public enum SigOnState : byte
+		public enum SignOnState : byte
 		{
 			[Description("No state yet! About to connect.")]
 			None = 0,
