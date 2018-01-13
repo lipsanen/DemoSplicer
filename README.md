@@ -10,7 +10,7 @@ Portal 2 support
 
 Fix the audio(allow sound to play through demo transitions while removing duplicate sounds from the following demo)
 
-Fix issue with header files occasionally being read incorrectly
+Fix issue with headers occasionally being read incorrectly
 
 Write correct information into the header file instead of just copying it from the first demo
 
