@@ -10,11 +10,19 @@ namespace DemoSplicer
 	{
 		List<byte> data;
 	    int offset;
+		const int MIN_SIZE = 16;
+
 
 		public BitWriterDeluxe()
 		{
 			data = new List<byte>();
 			data.Add(0);
+		}
+
+		public void PadTo(int size)
+		{
+			while (data.Count < size)
+				data.Add(0);
 		}
 
 		public byte[] Data

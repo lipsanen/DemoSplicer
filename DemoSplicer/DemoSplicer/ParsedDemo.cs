@@ -174,7 +174,7 @@ namespace DemoSplicer
 							msg.PriorData = reader.ReadBytes(0x4); // unknown
 
 						msg.Data = reader.ReadBytes(reader.ReadInt32());
-
+						
 						break;
 					case MessageType.SyncTick:
 					case MessageType.Nop:
@@ -183,6 +183,7 @@ namespace DemoSplicer
 					default:
 						throw new Exception("Unknown msg");
 				}
+
 				Info.Messages.Add(msg);
 			}
 		}
@@ -249,7 +250,7 @@ namespace DemoSplicer
 		/// <param name="writer"></param>
 		/// <param name="msg"></param>
 		/// <param name="runningTick"></param>
-		public static void WriteMessage(BinaryWriter writer, DemoMessage msg, int runningTick)
+		public static void WriteMessage(BinaryWriter writer, DemoMessage msg, int runningTick, bool inRange)
 		{
 			writer.Write((byte)msg.Type);
 			writer.Write(runningTick);
@@ -267,6 +268,19 @@ namespace DemoSplicer
 
 					writer.Write(msg.Data.Length);
 					writer.Write(msg.Data);
+
+
+					/*if(msg.Type == MessageType.Packet && !inRange)
+					{
+						var data = Packet.GetPacketDataWithoutSound(msg.Data);
+						writer.Write(data.Length);
+						writer.Write(data);
+					}
+					else
+					{ 
+						writer.Write(msg.Data.Length);
+						writer.Write(msg.Data);
+					}*/
 
 					break;
 			}
@@ -330,12 +344,10 @@ namespace DemoSplicer
 					}
 				}
 
-				WriteMessage(writer, msg, runningTick);
+				WriteMessage(writer, msg, runningTick, range.Key <= i);
 			}
 
-			if(!lastDemo)
-				InsertConsoleCommand(writer, runningTick, "stopsound");
-
+			InsertConsoleCommand(writer, runningTick, "stopsound");
 			writer.Flush();
 			return runningTick;
 		}

@@ -66,25 +66,30 @@ namespace DemoSplicer
 				var bb = new BitBuffer(data);
 				while (bb.BitsLeft > 6)
 				{
-					type = bb.ReadBits(6);
+					type =	(int)bb.ReadUnsignedBits(6);
 					MsgHandler handler;
 					if (Handlers.TryGetValue((uint)type, out handler))
 					{
 						handler(bb);
-						if(type != 13)
+						if(type != 17)
 							TransferBits(bw, data, bb.CurrentBit, previous);
 						previous = bb.CurrentBit;
 					}
 					else
 					{
-						break;
+						throw new Exception("Couldn't find handler for message type");
 					}
 				}
 
 				bb.SeekBits(bb.BitsLeft);
 				TransferBits(bw, data, bb.CurrentBit, previous);
 
-				return bw.Data;
+				var newData = bw.Data;
+
+				if (TryToReadPacket(newData))
+					return bw.Data;
+				else
+					throw new Exception("Written packet data was invalid.");
 			}
 			catch(Exception e)
 			{
@@ -133,6 +138,51 @@ namespace DemoSplicer
 			catch { }
 
 			return false;
+		}
+
+		public static bool TryToReadPacket(byte[] data)
+		{
+			List<int> msgs = new List<int>();
+			try
+			{
+				var type = 0;
+				var bb = new BitBuffer(data);
+				while (bb.BitsLeft > 6)
+				{
+					type = bb.ReadBits(6);
+					msgs.Add(type);
+					MsgHandler handler;
+					if (Handlers.TryGetValue((uint)type, out handler))
+					{
+						handler(bb);
+					}
+					else
+					{
+
+						/*Console.WriteLine("Failed.");
+						
+						foreach(int msg in msgs)
+						{
+							Console.Write(msg + " ");
+						}
+						Console.WriteLine(); */
+						return false;
+					}
+				}
+
+				return true;
+			}
+			catch
+			{
+				/*Console.WriteLine("Threw.");
+				
+				foreach (int msg in msgs)
+				{
+					Console.Write(msg + " ");
+				}
+				Console.WriteLine(); */
+				return false;
+			}
 		}
 
 		public static int FindDeltaPacketTick(byte[] data)
@@ -208,13 +258,14 @@ namespace DemoSplicer
 
 		private static void net_disconnect(BitBuffer bb)
 		{
-			bb.ReadString(1024);
+			bb.ReadString();
 		}
 
 		private static void net_file(BitBuffer bb)
 		{
 			bb.ReadBits(32);
 			bb.ReadString();
+			bb.ReadBoolean();
 			bb.ReadBoolean();
 		}
 
@@ -242,7 +293,7 @@ namespace DemoSplicer
 
 		private static void net_signonstate(BitBuffer bb)
 		{
-			bb.ReadBits(8);
+			bb.ReadByte();
 			bb.ReadBits(32);
 		}
 
@@ -253,12 +304,12 @@ namespace DemoSplicer
 
 		private static void svc_serverinfo(BitBuffer bb)
 		{
-			var version = bb.ReadBits(16);
-			bb.ReadBits(32);
+			var version = bb.ReadInt16();
+			bb.ReadInt32();
 			bb.ReadBoolean();
 			bb.ReadBoolean();
-			bb.ReadBits(32);
-			bb.ReadBits(16);
+			bb.ReadInt32();
+			bb.ReadInt16();
 			if (version < 18)
 				bb.ReadBits(32);
 			else
@@ -268,22 +319,21 @@ namespace DemoSplicer
 				bb.ReadInt32();
 				bb.ReadInt32();
 			}
-			bb.ReadBits(8);
-			bb.ReadBits(8);
+			bb.ReadByte();
+			bb.ReadByte();
 			bb.ReadSingle();
-			bb.ReadBits(8);
+			bb.ReadByte();
 
 			bb.ReadString();
 			bb.ReadString();
 			bb.ReadString();
 			bb.ReadString();
-			bb.ReadBoolean();
 		}
 
 		private static void svc_sendtable(BitBuffer bb)
 		{
 			bb.ReadBoolean();
-			var n = bb.ReadBits(16);
+			var n = (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(n);
 		}
 
@@ -305,28 +355,44 @@ namespace DemoSplicer
 			bb.ReadBoolean();
 		}
 
+		const int NET_MAX_PAYLOAD_BITS = 17;
+
+		static int Q_log2(int val)
+		{
+			int answer = 0;
+			while ((val>>=1) != 0)
+				answer++;
+			return answer;
+		}
+
 		private static void svc_createstringtable(BitBuffer bb)
 		{
+			if(bb.ReadByte() == 58)
+			{
+				bb.ReadByte();
+			}
+
 			bb.ReadString();
-			var m = bb.ReadBits(16);
-			bb.ReadBits((int)Math.Log(m, 2) + 1);
-			var n = bb.ReadBits(20);
+			var maxEntries = bb.ReadUInt16();
+			int encodeBits = (int)bb.ReadUnsignedBits(Q_log2(maxEntries));
+			var numEntries = (int)bb.ReadUnsignedBits(encodeBits + 1);
+			var length = (int)bb.ReadUnsignedBits(NET_MAX_PAYLOAD_BITS + 3);
 			var f = bb.ReadBoolean();
+
 			if (f)
 			{
 				bb.ReadBits(12);
 				bb.ReadBits(4);
 			}
 
-			bb.ReadBoolean();
-			bb.SeekBits(n);
+			bb.SeekBits(length);
 		}
 
 		private static void svc_updatestringtable(BitBuffer bb)
 		{
 			bb.ReadBits(5);
 			var sound = (bb.ReadBoolean() ? bb.ReadBits(16) : 1);
-			var b = bb.ReadBits(20);
+			var b = (int)bb.ReadUnsignedBits(20);
 			bb.SeekBits(b);
 		}
 
@@ -340,7 +406,7 @@ namespace DemoSplicer
 		{
 			bb.ReadBits(8);
 			bb.ReadBits(8);
-			var b = bb.ReadBits(16);
+			var b = (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(b);
 		}
 
@@ -348,7 +414,7 @@ namespace DemoSplicer
 		{
 			var r = bb.ReadBoolean();
 			var sounds = r ? 1 : bb.ReadBits(8);
-			var b = r ? bb.ReadBits(8) : bb.ReadBits(16);
+			var b = r ? (int)bb.ReadUnsignedBits(8) : (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(b);
 		}
 
@@ -356,7 +422,7 @@ namespace DemoSplicer
 		{
 			var r = bb.ReadBoolean();
 			var sounds = r ? 1 : bb.ReadBits(8);
-			var b = r ? bb.ReadBits(8) : bb.ReadBits(16);
+			var b = r ? (int)bb.ReadUnsignedBits(8) : (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(b);
 
 			return r;
@@ -371,12 +437,16 @@ namespace DemoSplicer
 		private static void svc_fixangle(BitBuffer bb)
 		{
 			bb.ReadBoolean();
-			var pos = bb.ReadVectorCoord();
+			bb.ReadInt16();
+			bb.ReadInt16();
+			bb.ReadInt16();
 		}
 
 		private static void svc_crosshairangle(BitBuffer bb)
 		{
-			var pos = bb.ReadVectorCoord();
+			bb.ReadInt16();
+			bb.ReadInt16();
+			bb.ReadInt16();
 		}
 
 		private static void svc_bspdecal(BitBuffer bb)
@@ -394,21 +464,24 @@ namespace DemoSplicer
 		private static void svc_usermessage(BitBuffer bb)
 		{
 			bb.ReadBits(8);
-			var b = bb.ReadBits(11);
+			var b = (int)bb.ReadUnsignedBits(11);
 			bb.SeekBits(b);
 		}
 
+		const int MAX_EDICT_BITS = 11;
+		const int MAX_SERVER_CLASS_BITS = 9;
+
 		private static void svc_entitymessage(BitBuffer bb)
 		{
-			bb.ReadBits(11);
-			bb.ReadBits(9);
-			var b = bb.ReadBits(11);
+			bb.ReadUnsignedBits(MAX_EDICT_BITS);
+			bb.ReadBits(MAX_SERVER_CLASS_BITS);
+			var b = (int)bb.ReadUnsignedBits(11);
 			bb.SeekBits(b);
 		}
 
 		private static void svc_gameevent(BitBuffer bb)
 		{
-			var b = bb.ReadBits(11);
+			var b = (int)bb.ReadUnsignedBits(11);
 			bb.SeekBits(b);
 		}
 
@@ -420,7 +493,7 @@ namespace DemoSplicer
 				bb.ReadBits(32);
 			bb.ReadBoolean();
 			bb.ReadBits(11);
-			var b = bb.ReadBits(20);
+			var b = (int)bb.ReadUnsignedBits(20);
 			bb.ReadBoolean();
 			bb.SeekBits(b);
 		}
@@ -428,7 +501,7 @@ namespace DemoSplicer
 		private static void svc_tempentities(BitBuffer bb)
 		{
 			bb.ReadBits(8);
-			var b = bb.ReadBits(17);
+			var b = (int)bb.ReadUnsignedBits(17);
 			bb.SeekBits(b);
 		}
 
@@ -440,14 +513,16 @@ namespace DemoSplicer
 		private static void svc_menu(BitBuffer bb)
 		{
 			bb.ReadBits(16);
-			var b = bb.ReadBits(16);
+			var b = (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(b << 3);
 		}
 
+		const int MAX_EVENT_BITS = 9;
+
 		private static void svc_gameeventlist(BitBuffer bb)
 		{
-			bb.ReadBits(9);
-			var b = bb.ReadBits(20);
+			bb.ReadBits(MAX_EVENT_BITS);
+			var b = (int)bb.ReadUnsignedBits(20);
 			bb.SeekBits(b);
 		}
 
@@ -459,7 +534,7 @@ namespace DemoSplicer
 
 		private static void svc_cmdkeyvalues(BitBuffer bb)
 		{
-			var b = bb.ReadBits(32);
+			var b = (int)bb.ReadUnsignedBits(32);
 			bb.SeekBits(b);
 		}
 
