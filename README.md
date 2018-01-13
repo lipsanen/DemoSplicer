@@ -8,11 +8,11 @@ A program for combining multiple Source demos into one for segmented runs.
 # Usage
 Invoke the program from the command line.
 
-With individual demos
+With individual demos:
 
 DemoSplicer.exe output.dem demo1.dem demo2.dem demo3.dem
 
-With a folder
+With a folder:
 
 DemoSplicer.exe output.dem folder
 
