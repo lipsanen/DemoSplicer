@@ -61,8 +61,8 @@ namespace DemoSplicer
 			int firstBits = Math.Min(nBits, BitsInByteLeft);
 			int totalBits = 0;
 			uint result = data[CurrentByteIndex];
-			result <<= (sizeof(uint) - firstBits - OffsetInByte);
-			result >>= (sizeof(uint) - firstBits);
+			result <<= (32 - firstBits - OffsetInByte);
+			result >>= (32 - firstBits);
 			nBits -= firstBits;
 			totalBits = firstBits;
 			SeekBits(firstBits);
@@ -71,8 +71,8 @@ namespace DemoSplicer
 			{
 				int bits = Math.Min(nBits, 8);
 				uint newPart = data[CurrentByteIndex];
-				newPart <<= (sizeof(uint) - bits);
-				newPart >>= (sizeof(uint) - totalBits - bits);
+				newPart <<= (32 - bits);
+				newPart >>= (32 - totalBits - bits);
 				totalBits += bits;
 				SeekBits(bits);
 				nBits -= bits;
@@ -87,7 +87,6 @@ namespace DemoSplicer
 	{
 		List<byte> data;
 	    int offset;
-		const int MIN_SIZE = 16;
 
 		public BitWriterDeluxe()
 		{
@@ -161,8 +160,8 @@ namespace DemoSplicer
 			uint addition = b;
 
 			addition >>= additionOffset;
-			addition <<= (sizeof(uint) - bits);
-			addition >>= (sizeof(uint) - offset - bits);
+			addition <<= (32 - bits);
+			addition >>= (32 - offset - bits);
 
 			data[data.Count - 1] = (byte)(data[data.Count - 1] | addition);
 			AdjustOffset(bits);
@@ -193,28 +192,6 @@ namespace DemoSplicer
 				byte newData = (byte)deluxe.ReadUnsignedBits(bits);
 				WriteBits(newData, bits, 0);
 			}
-
-			/*
-			int firstSegment = Math.Min(8 - bitIndex % 8, count);
-			int byteIndex = bitIndex / 8;
-			WriteBits(array[byteIndex], firstSegment, bitIndex % 8);
-			count -= firstSegment;
-			++byteIndex;
-			
-			while(count > 0)
-			{
-				if(count >= 8)
-				{
-					WriteByte(array[byteIndex]);
-					++byteIndex;
-					count -= 8;
-				}
-				else
-				{
-					WriteBits(array[byteIndex], count, 0);
-					count = 0;
-				}
-			} */
 		}
 
 		public void WriteBits(byte b, int nBits, int additionOffset)

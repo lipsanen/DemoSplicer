@@ -1,5 +1,5 @@
 # DemoSplicer
-A program for combining multiple new engine Source demos into one big demo for segmented runs.
+A program for combining multiple Source demos into one for segmented runs.
 
 # OMG CAN SOMEONE CHEAT WITH THIS?????
 1. Demos aren't sufficient proof for runs anyway, if they were you could also segment your run by map.
