@@ -142,8 +142,6 @@ namespace DemoSplicer
 			header = reader.ReadBytes(HEADER_LENGTH);
 		}
 
-		const int maxOffset = 20000;
-
 		private void Parse()
 		{
 			var reader = new BinaryReader(_fstream, Encoding.ASCII);
