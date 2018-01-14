@@ -47,7 +47,7 @@ namespace DemoSplicer
 		public List<ParsedDemo.DemoMessage> Messages;
 		public List<string> ParsingErrors;
 		public float Seconds;
-		public string ServerName, ClientName, MapName, GameDirectory;
+		public string ID, ServerName, ClientName, MapName, GameDirectory;
 
 		/// <summary>
 		/// Finds all the delta packets for the demo.
@@ -110,9 +110,9 @@ namespace DemoSplicer
 
 		private void ParseHeader(BinaryReader reader)
 		{
-			var id = reader.ReadBytes(8);
+			Info.ID = Encoding.ASCII.GetString(reader.ReadBytes(8));
 
-			if (Encoding.ASCII.GetString(id) != "HL2DEMO\0")
+			if (Info.ID != "HL2DEMO\0")
 			{
 				Info.ParsingErrors.Add("Source parser: Incorrect mw");
 			}
@@ -146,7 +146,7 @@ namespace DemoSplicer
 
 		private void Parse()
 		{
-			var reader = new BinaryReader(_fstream);
+			var reader = new BinaryReader(_fstream, Encoding.ASCII);
 			Info.ParsingErrors = new List<string>();
 			ParseHeader(reader);
 
