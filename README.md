@@ -21,8 +21,6 @@ In either case the demos are ordered either numerically if all the filenames are
 # TODO
 Portal 2 support
 
-Fix issue with headers occasionally being read incorrectly
-
 Write correct information into the header file instead of just copying it from the first demo
 
 Fix the weird crouching bug after demo transitions while holding crouch
