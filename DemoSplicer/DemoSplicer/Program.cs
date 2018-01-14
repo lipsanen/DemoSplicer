@@ -38,10 +38,12 @@ namespace DemoSplicer
 
 		static void Main(string[] args)
 		{
+			
 			if (!ArgsValid(args))
 				return;
 
 			Splicer.DoDemoWriting(args);
+			//Test.TestBitWriting();
 		}
 	}
 }

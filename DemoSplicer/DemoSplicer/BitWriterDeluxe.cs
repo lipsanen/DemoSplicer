@@ -6,12 +6,88 @@ using System.Threading.Tasks;
 
 namespace DemoSplicer
 {
+	public class BitBufferDeluxe
+	{
+		byte[] data { get; set; }
+		int offset;
+
+		public int OffsetInByte
+		{
+			get
+			{
+				return offset % 8;
+			}
+		}
+
+		public int CurrentByteIndex
+		{
+			get
+			{
+				return offset / 8;
+			}
+		}
+
+		public int BitsInByteLeft
+		{
+			get
+			{
+				return 8 - OffsetInByte;
+			}
+		}
+
+		public void SetPosition(int pos)
+		{
+			offset = pos;
+		}
+
+		private void SeekBits(int nBits)
+		{
+			offset += nBits;
+		}
+
+		public BitBufferDeluxe(IList<byte> data)
+		{
+			this.data = data.ToArray();
+			offset = 0;
+		}
+
+		public byte ReadByte()
+		{
+			return (byte)ReadUnsignedBits(8);
+		}
+
+		public uint ReadUnsignedBits(int nBits)
+		{
+			int firstBits = Math.Min(nBits, BitsInByteLeft);
+			int totalBits = 0;
+			uint result = data[CurrentByteIndex];
+			result <<= (32 - firstBits - OffsetInByte);
+			result >>= (32 - firstBits);
+			nBits -= firstBits;
+			totalBits = firstBits;
+			SeekBits(firstBits);
+
+			while(nBits > 0)
+			{
+				int bits = Math.Min(nBits, 8);
+				uint newPart = data[CurrentByteIndex];
+				newPart <<= (32 - bits);
+				newPart >>= (32 - totalBits - bits);
+				totalBits += bits;
+				SeekBits(bits);
+				nBits -= bits;
+				result |= newPart;
+			}
+
+			return result;
+		}
+	}
+
 	public class BitWriterDeluxe
 	{
 		List<byte> data;
 	    int offset;
 		const int MIN_SIZE = 16;
-
 
 		public BitWriterDeluxe()
 		{
@@ -19,17 +95,14 @@ namespace DemoSplicer
 			data.Add(0);
 		}
 
-		public void PadTo(int size)
-		{
-			while (data.Count < size)
-				data.Add(0);
-		}
-
 		public byte[] Data
 		{
 			get
 			{
-				return data.ToArray();
+				if (offset == 0)
+					return data.GetRange(0, data.Count - 1).ToArray();
+				else
+					return data.ToArray();
 			}
 		}
 
@@ -110,6 +183,18 @@ namespace DemoSplicer
 
 		public void WriteBitsFromArray(IList<byte> array, int bitIndex, int count)
 		{
+			BitBufferDeluxe deluxe = new BitBufferDeluxe(array);
+			deluxe.SetPosition(bitIndex);
+
+			while(count > 0)
+			{
+				int bits = Math.Min(count, 8);
+				count -= bits;
+				byte newData = (byte)deluxe.ReadUnsignedBits(bits);
+				WriteBits(newData, bits, 0);
+			}
+
+			/*
 			int firstSegment = Math.Min(8 - bitIndex % 8, count);
 			int byteIndex = bitIndex / 8;
 			WriteBits(array[byteIndex], firstSegment, bitIndex % 8);
@@ -129,7 +214,7 @@ namespace DemoSplicer
 					WriteBits(array[byteIndex], count, 0);
 					count = 0;
 				}
-			}
+			} */
 		}
 
 		public void WriteBits(byte b, int nBits, int additionOffset)

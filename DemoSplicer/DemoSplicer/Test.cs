@@ -13,7 +13,7 @@ namespace DemoSplicer
 			try
 			{
 				Random rng = new Random();
-				const int size = 10000000;
+				const int size = 1000;
 				byte[] byteArray = new byte[size];
 
 				for (int i = 0; i < size; ++i)

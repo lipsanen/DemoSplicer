@@ -142,6 +142,8 @@ namespace DemoSplicer
 			header = reader.ReadBytes(HEADER_LENGTH);
 		}
 
+		const int maxOffset = 20000;
+
 		private void Parse()
 		{
 			var reader = new BinaryReader(_fstream);
@@ -174,7 +176,7 @@ namespace DemoSplicer
 							msg.PriorData = reader.ReadBytes(0x4); // unknown
 
 						msg.Data = reader.ReadBytes(reader.ReadInt32());
-						
+
 						break;
 					case MessageType.SyncTick:
 					case MessageType.Nop:
@@ -266,11 +268,7 @@ namespace DemoSplicer
 					if (msg.PriorData != null)
 						writer.Write(msg.PriorData);
 
-					writer.Write(msg.Data.Length);
-					writer.Write(msg.Data);
-
-
-					/*if(msg.Type == MessageType.Packet && !inRange)
+					if(msg.Type == MessageType.Packet && !inRange && Packet.TryToReadPacket(msg.Data))
 					{
 						var data = Packet.GetPacketDataWithoutSound(msg.Data);
 						writer.Write(data.Length);
@@ -280,7 +278,7 @@ namespace DemoSplicer
 					{ 
 						writer.Write(msg.Data.Length);
 						writer.Write(msg.Data);
-					}*/
+					}
 
 					break;
 			}
@@ -295,10 +293,10 @@ namespace DemoSplicer
 		/// <param name="firstDemo"></param>
 		/// <param name="runningTick"></param>
 		/// <param name="lastDemo"></param>
-		/// <param name="firstMapDemo"></param>
+		/// <param name="firstDemoMap"></param>
 		/// <param name="lastDemoMap"></param>
 		/// <returns></returns>
-		public int WriteToFile(Stream s, int startTick, int lastTick, bool firstDemo, int runningTick, bool lastDemo, bool firstMapDemo, bool lastDemoMap)
+		public int WriteToFile(Stream s, int startTick, int lastTick, bool firstDemo, int runningTick, bool lastDemo, bool firstDemoMap, bool lastDemoMap)
 		{
 			var writer = new BinaryWriter(s);
 			var range = FindPacketRange(startTick, lastTick, lastDemo);
@@ -347,7 +345,8 @@ namespace DemoSplicer
 				WriteMessage(writer, msg, runningTick, range.Key <= i);
 			}
 
-			InsertConsoleCommand(writer, runningTick, "stopsound");
+			if(lastDemoMap)
+				InsertConsoleCommand(writer, runningTick, "stopsound");
 			writer.Flush();
 			return runningTick;
 		}

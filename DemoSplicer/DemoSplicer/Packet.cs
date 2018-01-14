@@ -46,9 +46,14 @@ namespace DemoSplicer
 			{32, svc_cmdkeyvalues}
 		};
 
+		const int NET_MAX_PAYLOAD_BITS = 17;
+		const int MAX_EDICT_BITS = 11;
+		const int MAX_SERVER_CLASS_BITS = 9;
+		const int MAX_EVENT_BITS = 9;
+		const int DELTASIZE_BITS = 20;
+
 		public static void TransferBits(BitWriterDeluxe writer, byte[] array, int current, int previous)
 		{
-
 			if (previous != current)
 			{
 				writer.WriteRangeFromArray(array, previous, current);
@@ -77,19 +82,18 @@ namespace DemoSplicer
 					}
 					else
 					{
-						throw new Exception("Couldn't find handler for message type");
+						throw new Exception("Unable to rewrite packets with sound.");
 					}
 				}
-
-				bb.SeekBits(bb.BitsLeft);
-				TransferBits(bw, data, bb.CurrentBit, previous);
 
 				var newData = bw.Data;
 
 				if (TryToReadPacket(newData))
 					return bw.Data;
 				else
+				{
 					throw new Exception("Written packet data was invalid.");
+				}
 			}
 			catch(Exception e)
 			{
@@ -142,6 +146,8 @@ namespace DemoSplicer
 
 		public static bool TryToReadPacket(byte[] data)
 		{
+			const string errorMsg = "Couldn't read packet data, unable to remove possible overlapping sound.";
+
 			List<int> msgs = new List<int>();
 			try
 			{
@@ -149,7 +155,7 @@ namespace DemoSplicer
 				var bb = new BitBuffer(data);
 				while (bb.BitsLeft > 6)
 				{
-					type = bb.ReadBits(6);
+					type = (int)bb.ReadUnsignedBits(6);
 					msgs.Add(type);
 					MsgHandler handler;
 					if (Handlers.TryGetValue((uint)type, out handler))
@@ -158,14 +164,7 @@ namespace DemoSplicer
 					}
 					else
 					{
-
-						/*Console.WriteLine("Failed.");
-						
-						foreach(int msg in msgs)
-						{
-							Console.Write(msg + " ");
-						}
-						Console.WriteLine(); */
+						Console.WriteLine(errorMsg);
 						return false;
 					}
 				}
@@ -174,13 +173,8 @@ namespace DemoSplicer
 			}
 			catch
 			{
-				/*Console.WriteLine("Threw.");
-				
-				foreach (int msg in msgs)
-				{
-					Console.Write(msg + " ");
-				}
-				Console.WriteLine(); */
+
+				Console.WriteLine(errorMsg);
 				return false;
 			}
 		}
@@ -355,34 +349,19 @@ namespace DemoSplicer
 			bb.ReadBoolean();
 		}
 
-		const int NET_MAX_PAYLOAD_BITS = 17;
-
-		static int Q_log2(int val)
-		{
-			int answer = 0;
-			while ((val>>=1) != 0)
-				answer++;
-			return answer;
-		}
-
 		private static void svc_createstringtable(BitBuffer bb)
 		{
-			if(bb.ReadByte() == 58)
-			{
-				bb.ReadByte();
-			}
-
-			bb.ReadString();
+			var tableName = bb.ReadString();
 			var maxEntries = bb.ReadUInt16();
-			int encodeBits = (int)bb.ReadUnsignedBits(Q_log2(maxEntries));
+			int encodeBits = (int)bb.ReadUnsignedBits((int)Math.Log(maxEntries, 2));
 			var numEntries = (int)bb.ReadUnsignedBits(encodeBits + 1);
 			var length = (int)bb.ReadUnsignedBits(NET_MAX_PAYLOAD_BITS + 3);
-			var f = bb.ReadBoolean();
+			var userDataFixedSize = bb.ReadBoolean();
 
-			if (f)
+			if (userDataFixedSize)
 			{
-				bb.ReadBits(12);
-				bb.ReadBits(4);
+				var dataSize = bb.ReadUnsignedBits(12);
+				var sizeBits = bb.ReadUnsignedBits(4);
 			}
 
 			bb.SeekBits(length);
@@ -468,9 +447,6 @@ namespace DemoSplicer
 			bb.SeekBits(b);
 		}
 
-		const int MAX_EDICT_BITS = 11;
-		const int MAX_SERVER_CLASS_BITS = 9;
-
 		private static void svc_entitymessage(BitBuffer bb)
 		{
 			bb.ReadUnsignedBits(MAX_EDICT_BITS);
@@ -487,13 +463,13 @@ namespace DemoSplicer
 
 		private static void svc_packetentities(BitBuffer bb)
 		{
-			bb.ReadBits(11);
-			var d = bb.ReadBoolean();
-			if (d)
-				bb.ReadBits(32);
-			bb.ReadBoolean();
-			bb.ReadBits(11);
-			var b = (int)bb.ReadUnsignedBits(20);
+			bb.ReadBits(MAX_EDICT_BITS);
+			var isDelta = bb.ReadBoolean();
+			if (isDelta)
+				bb.ReadInt32();
+			bb.ReadBoolean(); // Is baseline?
+			bb.ReadBits(MAX_EDICT_BITS);
+			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
 			bb.ReadBoolean();
 			bb.SeekBits(b);
 		}
@@ -516,8 +492,6 @@ namespace DemoSplicer
 			var b = (int)bb.ReadUnsignedBits(16);
 			bb.SeekBits(b << 3);
 		}
-
-		const int MAX_EVENT_BITS = 9;
 
 		private static void svc_gameeventlist(BitBuffer bb)
 		{
@@ -559,5 +533,59 @@ namespace DemoSplicer
 		}
 
 		private delegate void MsgHandler(BitBuffer bb);
+
+		private static void WriteMessagesToFile(byte[] bytes, string fileName, bool writeIndexes)
+		{
+			using (var stream = File.Open(fileName, FileMode.Create))
+			using (var writer = new StreamWriter(stream))
+			{
+				if (writeIndexes)
+				{
+					var indexes = GetMessageIndexes(bytes);
+
+					foreach (var index in indexes)
+					{
+						writer.WriteLine("{0} : {1} : {2}", index.Key, (index.Value / 8).ToString("X"), (index.Value % 8).ToString("X"));
+					}
+				}
+
+				int bytesPerRow = 16;
+
+				for (int i = 0; i < bytes.Length; ++i)
+				{
+					if (i != 0 && i % bytesPerRow == 0)
+						writer.WriteLine();
+
+					writer.Write(bytes[i].ToString("X").PadLeft(2, '0') + " ");
+				}
+			}
+		}
+
+		private static List<KeyValuePair<int, int>> GetMessageIndexes(byte[] bytes)
+		{
+			var list = new List<KeyValuePair<int, int>>();
+			var bb = new BitBuffer(bytes);
+			try
+			{
+				while (bb.BitsLeft > 6)
+				{
+					var type = (int)bb.ReadUnsignedBits(6);
+					list.Add(new KeyValuePair<int, int>(type, bb.CurrentBit - 6));
+					MsgHandler handler;
+					if (Handlers.TryGetValue((uint)type, out handler))
+					{
+						handler(bb);
+					}
+					else
+					{
+						throw new Exception("Couldn't find handler for message type");
+					}
+				}
+			}
+			catch { }
+
+			return list;
+		}
+
 	}
-	}
+}

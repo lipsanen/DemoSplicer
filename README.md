@@ -21,8 +21,6 @@ In either case the demos are ordered either numerically if all the filenames are
 # TODO
 Portal 2 support
 
-Fix the audio(allow sound to play through demo transitions while removing duplicate sounds from the following demo)
-
 Fix issue with headers occasionally being read incorrectly
 
 Write correct information into the header file instead of just copying it from the first demo
@@ -31,4 +29,4 @@ Fix the weird crouching bug after demo transitions while holding crouch
 
 Fix some particle related errors after demo transitions
 
-some other shit probably
+Fix glitch frames at the start of level changes
