@@ -87,7 +87,6 @@ namespace DemoSplicer
 	{
 		List<byte> data;
 	    int offset;
-		const int MIN_SIZE = 16;
 
 		public BitWriterDeluxe()
 		{
@@ -168,14 +167,6 @@ namespace DemoSplicer
 			AdjustOffset(bits);
 		}
 
-		public void PrintStatus()
-		{
-			string arr = BitConverter.ToString(data.ToArray());
-			Console.WriteLine("Array: " + arr);
-			Console.WriteLine("Current byte " + CurrentByte);
-			Console.WriteLine("Offset: " + offset);
-		}
-
 		public void WriteRangeFromArray(IList<byte> array, int start, int last)
 		{
 			WriteBitsFromArray(array, start, last - start);
@@ -193,28 +184,6 @@ namespace DemoSplicer
 				byte newData = (byte)deluxe.ReadUnsignedBits(bits);
 				WriteBits(newData, bits, 0);
 			}
-
-			/*
-			int firstSegment = Math.Min(8 - bitIndex % 8, count);
-			int byteIndex = bitIndex / 8;
-			WriteBits(array[byteIndex], firstSegment, bitIndex % 8);
-			count -= firstSegment;
-			++byteIndex;
-			
-			while(count > 0)
-			{
-				if(count >= 8)
-				{
-					WriteByte(array[byteIndex]);
-					++byteIndex;
-					count -= 8;
-				}
-				else
-				{
-					WriteBits(array[byteIndex], count, 0);
-					count = 0;
-				}
-			} */
 		}
 
 		public void WriteBits(byte b, int nBits, int additionOffset)
