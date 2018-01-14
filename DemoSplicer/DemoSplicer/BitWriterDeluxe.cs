@@ -61,8 +61,8 @@ namespace DemoSplicer
 			int firstBits = Math.Min(nBits, BitsInByteLeft);
 			int totalBits = 0;
 			uint result = data[CurrentByteIndex];
-			result <<= (32 - firstBits - OffsetInByte);
-			result >>= (32 - firstBits);
+			result <<= (sizeof(uint) - firstBits - OffsetInByte);
+			result >>= (sizeof(uint) - firstBits);
 			nBits -= firstBits;
 			totalBits = firstBits;
 			SeekBits(firstBits);
@@ -71,8 +71,8 @@ namespace DemoSplicer
 			{
 				int bits = Math.Min(nBits, 8);
 				uint newPart = data[CurrentByteIndex];
-				newPart <<= (32 - bits);
-				newPart >>= (32 - totalBits - bits);
+				newPart <<= (sizeof(uint) - bits);
+				newPart >>= (sizeof(uint) - totalBits - bits);
 				totalBits += bits;
 				SeekBits(bits);
 				nBits -= bits;
@@ -161,8 +161,8 @@ namespace DemoSplicer
 			uint addition = b;
 
 			addition >>= additionOffset;
-			addition <<= (32 - bits);
-			addition >>= (32 - offset - bits);
+			addition <<= (sizeof(uint) - bits);
+			addition >>= (sizeof(uint) - offset - bits);
 
 			data[data.Count - 1] = (byte)(data[data.Count - 1] | addition);
 			AdjustOffset(bits);
