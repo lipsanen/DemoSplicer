@@ -94,6 +94,21 @@ namespace DemoSplicer
 			data.Add(0);
 		}
 
+		public void MoveBitsIn(BitWriterDeluxe del)
+		{
+			int bitCount = del.BitsWritten;
+			var bytes = del.Data;
+			WriteBitsFromArray(bytes, 0, bitCount);
+		}
+
+		public int BitsWritten
+		{
+			get
+			{
+				return (data.Count - 1) * 8 + offset;
+			}
+		}
+
 		public byte[] Data
 		{
 			get
@@ -173,6 +188,29 @@ namespace DemoSplicer
 			Console.WriteLine("Array: " + arr);
 			Console.WriteLine("Current byte " + CurrentByte);
 			Console.WriteLine("Offset: " + offset);
+		}
+
+		public void WriteUnsignedBits(uint value, int nBits)
+		{
+			int bitsLeft = nBits;
+			uint mask = 0xFF;
+			int shift = 0;
+
+			while(bitsLeft > 0)
+			{
+				byte add = (byte)((value & mask) >> shift);
+				int bitCount = Math.Min(8, bitsLeft);
+				WriteBits(add, bitCount, 0);
+				mask <<= 8;
+				shift += 8;
+				bitsLeft -= bitCount;
+			}
+		}
+
+		public void WriteBoolean(bool t)
+		{
+			byte b = (byte)(t ? 1 : 0);
+			WriteBits(b, 1, 0);
 		}
 
 		public void WriteRangeFromArray(IList<byte> array, int start, int last)

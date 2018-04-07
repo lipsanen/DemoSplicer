@@ -21,7 +21,7 @@ namespace DemoSplicer
 			{
 				using (var stream = File.Open(file, FileMode.Open))
 				{
-					ParsedDemo parser = new ParsedDemo(stream);
+					ParsedDemo parser = new ParsedDemo(stream, file);
 					parsedDemos.Add(parser);
 				}
 			}
@@ -112,6 +112,43 @@ namespace DemoSplicer
 			PromptCombineDemoFiles(path, parsedDemos);
 		}
 
+		static bool TryExactDeltaMatch(List<DeltaPacket> lastFile, List<DeltaPacket> currentFile, DemoWriteInfo lastWriteInfo, DemoWriteInfo info)
+		{
+			for (int u = 0; u < currentFile.Count; ++u)
+			{
+				for (int v = lastFile.Count - 1; v >= 0; --v)
+				{
+					if (lastFile[v].GlobalTick == currentFile[u].DeltaFrom)
+					{
+					
+						lastWriteInfo.SetLast(lastFile[v].Tick, lastFile[v].GlobalTick);
+						info.SetStart(currentFile[u].Tick, currentFile[u].GlobalTick);
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
+		static bool TryApproximateMatch(List<DeltaPacket> lastFile, List<DeltaPacket> currentFile, DemoWriteInfo lastWriteInfo, DemoWriteInfo info)
+		{
+			for (int u = 0; u < currentFile.Count; ++u)
+			{
+				for (int v = lastFile.Count - 1; v >= 0; --v)
+				{
+					if (lastFile[v].GlobalTick <= currentFile[u].DeltaFrom)
+					{
+						lastWriteInfo.SetLast(lastFile[v].Tick, lastFile[v].GlobalTick);
+						info.SetStart(currentFile[u].Tick, currentFile[u].GlobalTick);
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
 		static List<DemoWriteInfo> GetWriteInfo(List<ParsedDemo> files)
 		{
 			List<DeltaPacket> lastFile = null;
@@ -135,43 +172,26 @@ namespace DemoSplicer
 
 					// Check for adjacent ticks on consecutive demos on the same map
 					if (files[i - 1].Info.MapName == files[i].Info.MapName)
-						// Start from the beginning of the latter demo to find as early of a tick to sync on as possible
-						for (int u = 0; u < currentFile.Count && !adjacentTickFound; ++u)
+					{
+						adjacentTickFound = TryExactDeltaMatch(lastFile, currentFile, writeInfos[lastIndex], info);
+						if(!adjacentTickFound)
 						{
-							for (int v = lastFile.Count - 1; v >= 0; --v)
-							{
-								if (lastFile[v].GlobalTick == currentFile[u].GlobalTick - 1)
-								{
-									adjacentTickFound = true;
-									writeInfos[lastIndex].LastTick = lastFile[v].Tick;
-									info.StartTick = currentFile[u].Tick;
-									break;
-								}
-							}
+							adjacentTickFound = TryApproximateMatch(lastFile, currentFile, writeInfos[lastIndex], info);
 						}
+					}
 
 					if (!adjacentTickFound)
 					{
 						// Let the previous demo run until the end if no tick is found
-						writeInfos[lastIndex].LastTick = int.MaxValue;
-
-						// If on the same map, start from the first delta tick
-						if (files[i].Info.MapName == files[i - 1].Info.MapName && currentFile.Count > 1)
-						{
-							info.StartTick = currentFile[0].Tick;
-						}
-						// If not on the same map, include all the baseline shit, string tables, etc.
-						else
-						{
-							info.StartTick = int.MinValue;
-						}
+						writeInfos[lastIndex].SetLast(int.MaxValue, int.MaxValue);
+						info.SetStart(currentFile[0].Tick, currentFile[0].GlobalTick);
 					}
 
 				}
 
 				// If last demo, include all the ticks
 				if (i == files.Count - 1)
-					info.LastTick = int.MaxValue;
+					info.SetLast(int.MaxValue, int.MaxValue);
 
 				writeInfos.Add(info);
 			}
@@ -179,16 +199,42 @@ namespace DemoSplicer
 			return writeInfos;
 		}
 
+		public static int GetTotalTicks(List<ParsedDemo> files, List<DemoWriteInfo> writeInfo)
+		{
+			int total = 0;
+
+			for(int i=0; i < files.Count; ++i)
+			{
+				total += files[i].Ticks(writeInfo[i].StartTick, writeInfo[i].LastTick);
+			}
+
+			return total;
+		}
+
+		public static int GetTotalPackets(List<ParsedDemo> files, List<DemoWriteInfo> writeInfo)
+		{
+			int total = 0;
+
+			for (int i = 0; i < files.Count; ++i)
+			{
+				total += files[i].Packets(writeInfo[i].StartTick, writeInfo[i].LastTick, i == files.Count - 1);
+			}
+
+			return total;
+		}
+
 		static void CombineDemos(string path, List<ParsedDemo> files)
 		{
 			var writeInfo = GetWriteInfo(files);
+			int ticks = GetTotalTicks(files, writeInfo);
+			int packets = GetTotalPackets(files, writeInfo);
+
 			using (var stream = File.Open(path, FileMode.Create))
 			{
 				int runningTick = -9999;
 
 				for (int i = 0; i < files.Count; ++i)
 				{
-					Console.WriteLine("Writing file {0}", i);
 					bool lastDemo = i == files.Count - 1;
 					bool lastDemoMap;
 					bool firstMapDemo = i == 0 || files[i - 1].Info.MapName != files[i].Info.MapName;
@@ -198,7 +244,12 @@ namespace DemoSplicer
 					else
 						lastDemoMap = true;
 
-					runningTick = files[i].WriteToFile(stream, writeInfo[i].StartTick, writeInfo[i].LastTick, writeInfo[i].WriteHeader, runningTick, lastDemo, firstMapDemo, lastDemoMap);
+					if(writeInfo[i].WriteHeader)
+					{
+						files[i].WriteHeader(stream, ticks, packets);
+					}
+
+					runningTick = files[i].WriteToFile(stream, writeInfo[i].StartTick, writeInfo[i].LastTick, writeInfo[i].WriteHeader, runningTick, lastDemo, lastDemoMap);
 				}
 			}
 		}

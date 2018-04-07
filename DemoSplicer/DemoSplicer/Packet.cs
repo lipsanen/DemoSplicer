@@ -61,7 +61,12 @@ namespace DemoSplicer
 			}
 		}
 
-		public static byte[] GetPacketDataWithoutSound(byte[] data)
+		public static byte[] GetPacketDataWithoutType(byte[] data, int type)
+		{
+			return GetPacketDataWithoutType(data, new int[] { type });
+		}
+
+		public static byte[] GetPacketDataWithoutType(byte[] data, IEnumerable<int> forbiddenFruits)
 		{
 			try
 			{
@@ -76,7 +81,7 @@ namespace DemoSplicer
 					if (Handlers.TryGetValue((uint)type, out handler))
 					{
 						handler(bb);
-						if(type != 17)
+						if(!forbiddenFruits.Contains(type))
 							TransferBits(bw, data, bb.CurrentBit, previous);
 						previous = bb.CurrentBit;
 					}
@@ -107,8 +112,23 @@ namespace DemoSplicer
 			try
 			{
 				var bb = new BitBuffer(data);
-				var type = bb.ReadBits(6);
-				return get_signonstate(bb);
+				while (bb.BitsLeft > 6)
+				{
+					var type = bb.ReadBits(6);
+
+					if (type == 6)
+					{
+						return get_signonstate(bb);
+					}
+					else
+					{
+						MsgHandler handler;
+						if (Handlers.TryGetValue((uint)type, out handler))
+						{
+							handler(bb);
+						}
+					}
+				}
 			}
 			catch{ }
 
@@ -144,7 +164,7 @@ namespace DemoSplicer
 			return false;
 		}
 
-		public static bool TryToReadPacket(byte[] data)
+		public static bool TryToReadPacket(byte[] data, bool print = false)
 		{
 			const string errorMsg = "Couldn't read packet data, unable to remove possible overlapping sound.";
 
@@ -156,6 +176,8 @@ namespace DemoSplicer
 				while (bb.BitsLeft > 6)
 				{
 					type = (int)bb.ReadUnsignedBits(6);
+					if(print)
+						Console.WriteLine("Type {0} read", type);
 					msgs.Add(type);
 					MsgHandler handler;
 					if (Handlers.TryGetValue((uint)type, out handler))
@@ -171,9 +193,9 @@ namespace DemoSplicer
 
 				return true;
 			}
-			catch
+			catch(Exception ex)
 			{
-
+				Console.WriteLine(ex.ToString());
 				Console.WriteLine(errorMsg);
 				return false;
 			}
@@ -189,6 +211,30 @@ namespace DemoSplicer
 				if (type == 26)
 				{
 					return is_deltapacket(bb);
+				}
+				else
+				{
+					MsgHandler handler;
+					if (Handlers.TryGetValue((uint)type, out handler))
+					{
+						handler(bb);
+					}
+				}
+			}
+
+			return -1;
+		}
+
+		public static int FindDeltaFrom(byte[] data)
+		{
+			var bb = new BitBuffer(data);
+			while (bb.BitsLeft > 6)
+			{
+				var type = bb.ReadBits(6);
+
+				if (type == 26)
+				{
+					return delta_from(bb);
 				}
 				else
 				{
@@ -351,20 +397,19 @@ namespace DemoSplicer
 
 		private static void svc_createstringtable(BitBuffer bb)
 		{
-			var tableName = bb.ReadString();
-			var maxEntries = bb.ReadUInt16();
-			int encodeBits = (int)bb.ReadUnsignedBits((int)Math.Log(maxEntries, 2));
-			var numEntries = (int)bb.ReadUnsignedBits(encodeBits + 1);
-			var length = (int)bb.ReadUnsignedBits(NET_MAX_PAYLOAD_BITS + 3);
-			var userDataFixedSize = bb.ReadBoolean();
-
-			if (userDataFixedSize)
+			bb.ReadString(); // table name;
+			var m = bb.ReadBits(16); // max entries
+			bb.SeekBits((int)Math.Log(m, 2) + 1);
+			var n = bb.ReadBits(20); // Length in bits
+			var f = bb.ReadBoolean(); // fixed size?
+			if (f)
 			{
-				var dataSize = bb.ReadUnsignedBits(12);
-				var sizeBits = bb.ReadUnsignedBits(4);
+				bb.ReadBits(12); // size
+				bb.ReadBits(4); // bits
 			}
 
-			bb.SeekBits(length);
+			bb.ReadBoolean(); // compressed
+			bb.SeekBits(n);
 		}
 
 		private static void svc_updatestringtable(BitBuffer bb)
@@ -461,6 +506,45 @@ namespace DemoSplicer
 			bb.SeekBits(b);
 		}
 
+		public static void WriteDeleterPacket(BinaryWriter writer, int tick)
+		{
+			// Packet stuff
+			writer.Write((byte)ParsedDemo.MessageType.Packet);
+			writer.Write(tick);
+			writer.Write(new byte[0x54]);
+			
+
+			// svc_packetentities
+			var bw2 = new BitWriterDeluxe();
+			bw2.WriteUnsignedBits(26, 6);
+			bw2.WriteUnsignedBits(4095, MAX_EDICT_BITS);
+			bw2.WriteBoolean(false);
+			//bw.WriteBits(deltaFrom, 32);
+			bw2.WriteBoolean(true);
+			bw2.WriteUnsignedBits(4095, MAX_EDICT_BITS);
+			var bw3 = GetDeleterPacketEntitiesData();
+			bw2.WriteUnsignedBits((uint)bw3.BitsWritten, DELTASIZE_BITS);
+			bw2.MoveBitsIn(bw3);
+			bw2.WriteBoolean(false);
+
+			var bytes = bw2.Data;
+			writer.Write(bytes.Count());
+			writer.Write(bytes);
+		}
+
+		private static BitWriterDeluxe GetDeleterPacketEntitiesData()
+		{
+			BitWriterDeluxe bw = new BitWriterDeluxe();
+			for(int i=0; i < 4095; ++i)
+			{
+				bw.WriteUnsignedBits(0, 6);
+				bw.WriteBoolean(false);
+				bw.WriteBoolean(true);
+			}
+
+			return bw;
+		}
+
 		private static void svc_packetentities(BitBuffer bb)
 		{
 			bb.ReadBits(MAX_EDICT_BITS);
@@ -472,6 +556,22 @@ namespace DemoSplicer
 			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
 			bb.ReadBoolean();
 			bb.SeekBits(b);
+		}
+
+		private static int delta_from(BitBuffer bb)
+		{
+			bb.ReadBits(MAX_EDICT_BITS);
+			var isDelta = bb.ReadBoolean();
+			int deltaFrom = -1;
+			if (isDelta)
+				deltaFrom = bb.ReadInt32();
+			bool baseline = bb.ReadBoolean(); // Is baseline?
+			bb.ReadBits(MAX_EDICT_BITS);
+			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
+			bb.ReadBoolean();
+			bb.SeekBits(b);
+
+			return deltaFrom;
 		}
 
 		private static void svc_tempentities(BitBuffer bb)
