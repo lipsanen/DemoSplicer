@@ -1,7 +1,7 @@
 # DemoSplicer
 A program for combining multiple new engine Source demos into one big demo for segmented runs.
 
-# OMG CAN SOMEONE CHEAT WITH THIS?????
+# Can someone use this for splicing SS runs?
 1. Demos aren't sufficient proof for runs anyway, if they were you could also segment your run by map.
 2. Demos spliced using this program can be detected.
 
@@ -19,12 +19,10 @@ DemoSplicer.exe output.dem folder
 In either case the demos are ordered either numerically if all the filenames are numbers, alphabetically otherwise.
 
 # TODO
-Portal 2 support
+Fix:
 
-Write correct information into the header file instead of just copying it from the first demo
+* The weird crouching bug after demo transitions while holding crouch
 
-Fix the weird crouching bug after demo transitions while holding crouch
+* Some particle related errors after demo transitions
 
-Fix some particle related errors after demo transitions
-
-Fix glitch frames at the start of level changes
+* Compability with VolvoWrench
