@@ -63,6 +63,7 @@
     <Compile Include="BitWriterDeluxe.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Packet.cs" />
+    <Compile Include="PacketReader.cs" />
     <Compile Include="ParsedDemo.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -139,9 +139,9 @@ namespace DemoSplicer
 			}
 
 			// check for overflow
-			if (CurrentBit + nBits > _data.Count * 8)
+			if (nBits > BitsLeft)
 			{
-				throw new BitBufferOutOfRangeException();
+				throw new BitBufferOutOfRangeException(string.Format("Tried to read {0} while had {1}", nBits, BitsLeft));
 			}
 
 			var currentByte = CurrentBit / 8;
@@ -282,7 +282,7 @@ namespace DemoSplicer
 		{
 			var bytes = new List<byte>();
 
-			while (true)
+			while (BytesLeft > 0)
 			{
 				var b = ReadByte();
 

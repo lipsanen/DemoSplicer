@@ -170,9 +170,12 @@ namespace DemoSplicer
 					int lastIndex = writeInfos.Count - 1;
 					bool adjacentTickFound = false;
 
+					
+
 					// Check for adjacent ticks on consecutive demos on the same map
 					if (files[i - 1].Info.MapName == files[i].Info.MapName)
 					{
+
 						adjacentTickFound = TryExactDeltaMatch(lastFile, currentFile, writeInfos[lastIndex], info);
 						if(!adjacentTickFound)
 						{
@@ -184,7 +187,13 @@ namespace DemoSplicer
 					{
 						// Let the previous demo run until the end if no tick is found
 						writeInfos[lastIndex].SetLast(int.MaxValue, int.MaxValue);
-						info.SetStart(currentFile[0].Tick, currentFile[0].GlobalTick);
+						if (currentFile.Count > 0)
+						{
+							info.SetStart(currentFile[0].Tick, currentFile[0].GlobalTick);
+						}
+						else
+							info.SetStart(int.MinValue, int.MinValue);
+						
 					}
 
 				}

@@ -54,8 +54,6 @@ namespace DemoSplicer
 
 		public int StartGlobal { get; private set; }
 
-		public bool SL { get; set; }
-
 		public void SetFirstDemo()
 		{
 			StartTick = int.MinValue;
@@ -84,16 +82,17 @@ namespace DemoSplicer
 				{
 					try
 					{
-						var result = Packet.FindDeltaPacketTick(message.Data);
+						var result = Packet.FindDeltaPacketTick(this, message.Data);
 
 						if (result != -1)
 						{
-							var tick = Packet.FindTick(message.Data);
-							var delta = Packet.FindDeltaFrom(message.Data);
+							var tick = Packet.FindTick(this, message.Data);
+							var delta = Packet.FindDeltaFrom(this, message.Data);
 							packets.Add(new DeltaPacket { DeltaFrom = delta, Tick = message.Tick, GlobalTick = tick });
 						}
 					}
-					catch { }
+					catch
+					{ }
 				}
 			}
 
@@ -214,7 +213,7 @@ namespace DemoSplicer
 
 			while (true)
 			{
-				var msg = new DemoMessage { Type = (MessageType)reader.ReadByte() };
+				var msg = new DemoMessage(Info, (MessageType)reader.ReadByte());
 				if (msg.Type == MessageType.Stop)
 				{
 					msg.Data = reader.ReadBytes((int)(reader.BaseStream.Length - reader.BaseStream.Position));
@@ -298,7 +297,7 @@ namespace DemoSplicer
 		{
 			var msg = Info.Messages[index];
 
-			if (!inRange && !msg.IsImportantMessage)
+			if (!inRange && !msg.IsImportantMessage(Info.NetProtocol))
 				return true;
 			else if (msg.Type == MessageType.SyncTick)
 				return true;
@@ -327,7 +326,7 @@ namespace DemoSplicer
 			for (int i = 0; i < Info.Messages.Count; ++i)
 			{
 				var msg = Info.Messages[i];
-				if (msg.IsMovementPacket && msg.Tick <= lastTick && msg.Tick >= startTick)
+				if (msg.IsMovementPacket(Info.NetProtocol) && msg.Tick <= lastTick && msg.Tick >= startTick)
 				{
 					if (firstTick == -1)
 						firstTick = msg.Tick;
@@ -345,7 +344,7 @@ namespace DemoSplicer
 		/// <param name="writer"></param>
 		/// <param name="msg"></param>
 		/// <param name="runningTick"></param>
-		public static void WriteMessage(BinaryWriter writer, DemoMessage msg, int runningTick, bool inRange)
+		public void WriteMessage(BinaryWriter writer, DemoMessage msg, int runningTick, bool inRange, int netProtocol)
 		{
 			writer.Write((byte)msg.Type);
 			if (msg.Type == MessageType.SyncTick)
@@ -364,9 +363,15 @@ namespace DemoSplicer
 					if (msg.PriorData != null)
 						writer.Write(msg.PriorData);
 
-					if((msg.Type == MessageType.Packet || msg.Type == MessageType.Signon) && !inRange)
+					if(!inRange && msg.Type == MessageType.Signon)
 					{
-						var data = Packet.GetPacketDataWithoutType(msg.Data, new int[] { 17 });
+						var data = Packet.GetPacketDataWithoutType(Info, msg.Data, new int[] { 17 });
+						writer.Write(data.Length);
+						writer.Write(data);
+					}
+					else if(msg.Type == MessageType.Packet && !inRange)
+					{
+						var data = Packet.GetPacketDataWithoutType(Info, msg.Data, new int[] { 17 });
 						writer.Write(data.Length);
 						writer.Write(data);
 					}
@@ -374,7 +379,7 @@ namespace DemoSplicer
 					{
 						writer.Write(msg.Data.Length);
 						writer.Write(msg.Data);
-					}
+					} 
 
 					break;
 			}
@@ -396,6 +401,9 @@ namespace DemoSplicer
 		{
 			var writer = new BinaryWriter(s);
 			var range = FindPacketRange(startTick, lastTick, lastDemo);
+
+			int min = Math.Max(0, startTick);
+
 			int prevTick;
 
 			if (startTick > 0)
@@ -438,58 +446,71 @@ namespace DemoSplicer
 					}
 				}
 
-				if (ShouldTurnOnDrawHistory(msg, startTick, historyOn))
+				if (ShouldTurnOnDrawHistory(msg, startTick, historyOn, Info.NetProtocol))
 				{
-					TurnOnDrawHistory(writer, runningTick, ref historyOn);
+					TurnOnDrawHistory(writer, runningTick, ref historyOn, Info.NetProtocol);
 				}
 
-				WriteMessage(writer, msg, runningTick, range.InRange(i));
+				WriteMessage(writer, msg, runningTick, range.InRange(i), Info.NetProtocol);
+
 			}
 
-			if(lastDemoMap)
+			if (lastDemoMap)
 			{
 				InsertConsoleCommand(writer, runningTick, "stopsound");
 			}
-			InsertConsoleCommand(writer, runningTick, string.Format("echo Playing demo:{0}", fileName));
 
 			writer.Flush();
 			return runningTick;
 		}
 
-		private static void TurnOnDrawHistory(BinaryWriter writer, int runningTick, ref bool historyOn)
+		private static void TurnOnDrawHistory(BinaryWriter writer, int runningTick, ref bool historyOn, int netProtocol)
 		{
 			historyOn = true;
 			InsertConsoleCommand(writer, runningTick, "hud_drawhistory_time 5");
 		}
 
-		private static bool ShouldTurnOnDrawHistory(DemoMessage msg, int startTick, bool historyOn)
+		private static bool ShouldTurnOnDrawHistory(DemoMessage msg, int startTick, bool historyOn, int netProtocol)
 		{
-			return msg.Tick - 6 > startTick && msg.IsMovementPacket && !historyOn;
+			return !historyOn && msg.IsDelta(netProtocol) && msg.Tick - 6 > startTick;
 		}
 
 		public class DemoMessage
 		{
+			public SourceDemoInfo Info { get; set; }
+			public MessageType Type { get; set; }
+
 			public byte[] PriorData;
 			public byte[] Data;
 			public int Tick;
-			public MessageType Type;
 
-			public bool IsMovementPacket
+			public DemoMessage(SourceDemoInfo info, MessageType type)
 			{
-				get
-				{
-					return (Type == MessageType.Packet && (Packet.HasMSGType(Data, 26)));
-				}
+				Info = info;
+				Type = type;
 			}
 
-			public bool IsImportantMessage
+			public bool IsMovementPacket(int netProtocol)
 			{
-				get
-				{
+
+				return (Type == MessageType.Packet && (Packet.HasMSGType(Info, Data, 26)));
+			}
+
+			public bool IsDelta(int netProtocol)
+			{
+				return (Type == MessageType.Packet && Packet.IsRealDelta(Info, Data));
+			}
+
+			public bool HasSpawned(int netProtocol)
+			{
+				return (Type == MessageType.Signon && Packet.GetSignonType(Info, Data) == Packet.SignOnState.Spawn);
+			}
+
+			public bool IsImportantMessage(int netProtocol)
+			{
 					return Type == MessageType.DataTables ||
 						Type == MessageType.Signon ||
-						IsMovementPacket;
-				}
+						IsMovementPacket(netProtocol);
 			}
 		}
 	}

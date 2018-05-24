@@ -9,440 +9,226 @@ namespace DemoSplicer
 {
 	internal class Packet
 	{
-		private static readonly Dictionary<uint, MsgHandler> Handlers = new Dictionary<uint, MsgHandler>
-		{
-			{
-				0, (_) => { }
-			},
-			{1, net_disconnect},
-			{2, net_file},
-			{3, net_tick},
-			{4, net_stringcmd},
-			{5, net_setconvar},
-			{6, net_signonstate},
-			{7, svc_print},
-			{8, svc_serverinfo},
-			{9, svc_sendtable},
-			{10, svc_classinfo},
-			{11, svc_setpause},
-			{12, svc_createstringtable},
-			{13, svc_updatestringtable},
-			{14, svc_voiceinit},
-			{15, svc_voicedata},
-			{17, svc_sounds},
-			{18, svc_setview},
-			{19, svc_fixangle},
-			{20, svc_crosshairangle},
-			{21, svc_bspdecal},
-			{23, svc_usermessage},
-			{24, svc_entitymessage},
-			{25, svc_gameevent},
-			{26, svc_packetentities},
-			{27, svc_tempentities},
-			{28, svc_prefetch},
-			{29, svc_menu},
-			{30, svc_gameeventlist},
-			{31, svc_getcvarvalue},
-			{32, svc_cmdkeyvalues}
-		};
-
 		const int NET_MAX_PAYLOAD_BITS = 17;
 		const int MAX_EDICT_BITS = 11;
 		const int MAX_SERVER_CLASS_BITS = 9;
 		const int MAX_EVENT_BITS = 9;
 		const int DELTASIZE_BITS = 20;
-
-		public static void TransferBits(BitWriterDeluxe writer, byte[] array, int current, int previous)
+		
+		public static int GetNetMSGBits(int networkProto)
 		{
-			if (previous != current)
+			int bits;
+			if (networkProto == 14)
 			{
-				writer.WriteRangeFromArray(array, previous, current);
-				
+				bits = 5;
 			}
+			else
+				bits = 6;
+
+			return bits;
 		}
 
-		public static byte[] GetPacketDataWithoutType(byte[] data, int type)
+		public static void PacketBreakDown(SourceDemoInfo info, byte[] data)
 		{
-			return GetPacketDataWithoutType(data, new int[] { type });
+			PacketReader reader = new PacketReader(info, data);
+			reader.MessageTypeRead += (s, e) =>
+			{
+				Console.Write("{0} ", e.Message);
+			};
+
+			Console.Write("Messages: ");
+			reader.Parse();
+			Console.WriteLine();
 		}
 
-		public static byte[] GetPacketDataWithoutType(byte[] data, IEnumerable<int> forbiddenFruits)
+		public static byte[] GetPacketDataWithTypes(SourceDemoInfo info, byte[] data, IEnumerable<int> allowedFruits)
 		{
-			try
-			{
-				int type = 0;
-				int previous = 0;
-				var bw = new BitWriterDeluxe();
-				var bb = new BitBuffer(data);
-				while (bb.BitsLeft > 6)
-				{
-					type =	(int)bb.ReadUnsignedBits(6);
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-						if(!forbiddenFruits.Contains(type))
-							TransferBits(bw, data, bb.CurrentBit, previous);
-						previous = bb.CurrentBit;
-					}
-					else
-					{
-						throw new Exception("Unable to rewrite packets with sound.");
-					}
-				}
+			PacketReader reader = new PacketReader(info, data);
+			BitWriterDeluxe writer = new BitWriterDeluxe();
 
-				var newData = bw.Data;
-
-				if (TryToReadPacket(newData))
-					return bw.Data;
-				else
-				{
-					throw new Exception("Written packet data was invalid.");
-				}
-			}
-			catch(Exception e)
+			reader.MessageRead += (s, e) =>
 			{
-				Console.WriteLine(e.Message);
+				if (allowedFruits.Contains(e.Type))
+				{
+					writer.MoveBitsIn(e.DataBitWriter);
+				}
+			};
+
+			reader.Parse();
+			var newData = writer.Data;
+
+			if (PacketFormatValid(info, newData))
+				return newData;
+			else
 				return data;
-			}
 		}
 
-		public static SignOnState GetSignonType(byte[] data)
+		public static byte[] GetPacketDataWithoutType(SourceDemoInfo info, byte[] data, IEnumerable<int> forbiddenFruits)
 		{
-			try
+			PacketReader reader = new PacketReader(info, data);
+			BitWriterDeluxe writer = new BitWriterDeluxe();
+
+			reader.MessageRead += (s, e) =>
 			{
-				var bb = new BitBuffer(data);
-				while (bb.BitsLeft > 6)
+				if (!forbiddenFruits.Contains(e.Type))
 				{
-					var type = bb.ReadBits(6);
-
-					if (type == 6)
-					{
-						return get_signonstate(bb);
-					}
-					else
-					{
-						MsgHandler handler;
-						if (Handlers.TryGetValue((uint)type, out handler))
-						{
-							handler(bb);
-						}
-					}
+					writer.MoveBitsIn(e.DataBitWriter);
 				}
-			}
-			catch{ }
+			};
 
-			return SignOnState.None;
+			reader.Parse();
+			var newData = writer.Data;
+
+			if (PacketFormatValid(info, newData))
+				return newData;
+			else
+				return data;
 		}
 
-		public static bool HasMSGType(byte[] data, int id)
+		public static SignOnState GetSignonType(SourceDemoInfo info, byte[] data)
 		{
-			try
+			PacketReader reader = new PacketReader(info, data);
+			SignOnState state = SignOnState.None;
+
+			reader.MessageRead += (s, e) =>
 			{
-				var bb = new BitBuffer(data);
-				while (bb.BitsLeft > 6)
+				if (e.Type == 26)
 				{
-					var type = bb.ReadBits(6);
-
-					if (type == id)
-					{
-						return true;
-					}
-					else
-					{
-						MsgHandler handler;
-						if (Handlers.TryGetValue((uint)type, out handler))
-						{
-							handler(bb);
-						}
-					}
+					reader.Stop();
+					BitBuffer bb = new BitBuffer(e.WithoutType);
+					state = GetSignonState(bb);
 				}
+			};
 
-			}
-			catch { }
-
-			return false;
+			reader.Parse();
+			return state;
 		}
 
-		public static bool TryToReadPacket(byte[] data, bool print = false)
+		public static bool HasMSGType(SourceDemoInfo info, byte[] data, int type)
 		{
-			const string errorMsg = "Couldn't read packet data, unable to remove possible overlapping sound.";
+			PacketReader reader = new PacketReader(info, data);
+			HashSet<int> messages = new HashSet<int>();
 
-			List<int> msgs = new List<int>();
-			try
-			{
-				var type = 0;
-				var bb = new BitBuffer(data);
-				while (bb.BitsLeft > 6)
-				{
-					type = (int)bb.ReadUnsignedBits(6);
-					if(print)
-						Console.WriteLine("Type {0} read", type);
-					msgs.Add(type);
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-					}
-					else
-					{
-						Console.WriteLine(errorMsg);
-						return false;
-					}
-				}
+			reader.MessageTypeRead += (s, e) => { messages.Add(e.Message); };
+			reader.Parse();
 
-				return true;
-			}
-			catch(Exception ex)
-			{
-				Console.WriteLine(ex.ToString());
-				Console.WriteLine(errorMsg);
-				return false;
-			}
+			return messages.Contains(type);
 		}
 
-		public static int FindDeltaPacketTick(byte[] data)
+		public static bool PacketFormatValid(SourceDemoInfo info, byte[] data)
 		{
-			var bb = new BitBuffer(data);
-			while (bb.BitsLeft > 6)
-			{
-				var type = bb.ReadBits(6);
+			PacketReader reader = new PacketReader(info, data);
+			bool readCorrectly = false;
 
-				if (type == 26)
-				{
-					return is_deltapacket(bb);
-				}
-				else
-				{
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-					}
-				}
-			}
+			reader.PacketSuccessfullyRead += (s, e) => { readCorrectly = true; };
+			reader.Parse();
 
-			return -1;
+			return readCorrectly;
 		}
 
-		public static int FindDeltaFrom(byte[] data)
+		public static int FindDeltaPacketTick(SourceDemoInfo info, byte[] data)
 		{
-			var bb = new BitBuffer(data);
-			while (bb.BitsLeft > 6)
+			PacketReader reader = new PacketReader(info, data);
+			int deltaTick = -1;
+
+			reader.MessageRead += (s, e) =>
 			{
-				var type = bb.ReadBits(6);
-
-				if (type == 26)
+				if (e.Type == 26)
 				{
-					return delta_from(bb);
+					reader.Stop();
+					BitBuffer bb = new BitBuffer(e.WithoutType);
+					deltaTick = GetDeltaTick(bb);
 				}
-				else
-				{
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-					}
-				}
-			}
+			};
 
-			return -1;
+			reader.Parse();
+			return deltaTick;
 		}
 
-		public static int FindTick(byte[] data)
+		public static bool IsRealDelta(SourceDemoInfo info, byte[] data)
 		{
-			var bb = new BitBuffer(data);
-			while (bb.BitsLeft > 6)
+			PacketReader reader = new PacketReader(info, data);
+			bool isRealDelta = false;
+
+			reader.MessageRead += (s, e) =>
 			{
-				var type = bb.ReadBits(6);
-
-				if (type == 3)
+				if (e.Type == 26)
 				{
-					return get_tick(bb);
+					reader.Stop();
+					BitBuffer bb = new BitBuffer(e.WithoutType);
+					isRealDelta = !IsDeltaBaseline(bb);
 				}
-				else
-				{
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-					}
-				}
-			}
+			};
 
-			return -1;
+			reader.Parse();
+			return isRealDelta;
 		}
 
-		private static int get_tick(BitBuffer bb)
+		public static int FindDeltaFrom(SourceDemoInfo info, byte[] data)
+		{
+			PacketReader reader = new PacketReader(info, data);
+			int deltaFrom = -1;
+
+			reader.MessageRead += (s, e) =>
+			{
+				if (e.Type == 26)
+				{
+					reader.Stop();
+					BitBuffer bb = new BitBuffer(e.WithoutType);
+					deltaFrom = DeltaFrom(bb);
+				}
+			};
+
+			reader.Parse();
+			return deltaFrom;
+		}
+
+		public static int FindTick(SourceDemoInfo info, byte[] data)
+		{
+			PacketReader reader = new PacketReader(info, data);
+			int tick = -1;
+
+			reader.MessageRead += (s, e) =>
+			{
+				if(e.Type == 3)
+				{
+					reader.Stop();
+					BitBuffer bb = new BitBuffer(e.WithoutType);
+					tick = GetTick(bb);
+				}
+			};
+
+			reader.Parse();
+			return tick;
+		}
+
+		private static int GetTick(BitBuffer bb)
 		{
 			return bb.ReadBits(32);
 		}
 
-		private static SignOnState get_signonstate(BitBuffer bb)
+		private static SignOnState GetSignonState(BitBuffer bb)
 		{
 			return (SignOnState)bb.ReadBits(8);
 		}
 
-		private static int is_deltapacket(BitBuffer bb)
+		private static int GetDeltaTick(BitBuffer bb)
 		{
-			bb.SeekBits(11);
-			var d = bb.ReadBoolean();
-			if (d)
-			{
-				int rval = bb.ReadBits(32);
-				return rval;
-			}
+			bb.ReadBits(MAX_EDICT_BITS);
+			var isDelta = bb.ReadBoolean();
+
+			if (isDelta)
+				return bb.ReadInt32();
+			bool baseline = bb.ReadBoolean(); // Is baseline?
+			bb.ReadBits(MAX_EDICT_BITS);
+			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
+			bb.ReadBoolean();
+			bb.SeekBits(b);
 
 			return -1;
 		}
 
-		private static void net_disconnect(BitBuffer bb)
-		{
-			bb.ReadString();
-		}
-
-		private static void net_file(BitBuffer bb)
-		{
-			bb.ReadBits(32);
-			bb.ReadString();
-			bb.ReadBoolean();
-			bb.ReadBoolean();
-		}
-
-		private static void net_tick(BitBuffer bb)
-		{
-			bb.ReadBits(32);
-			bb.ReadBits(16);
-			bb.ReadBits(16);
-		}
-
-		private static void net_stringcmd(BitBuffer bb)
-		{
-			bb.ReadString();
-		}
-
-		private static void net_setconvar(BitBuffer bb)
-		{
-			var n = bb.ReadBits(8);
-			while (n-- > 0)
-			{
-				bb.ReadString();
-				bb.ReadString();
-			}
-		}
-
-		private static void net_signonstate(BitBuffer bb)
-		{
-			bb.ReadByte();
-			bb.ReadBits(32);
-		}
-
-		private static void svc_print(BitBuffer bb)
-		{
-			bb.ReadString();
-		}
-
-		private static void svc_serverinfo(BitBuffer bb)
-		{
-			var version = bb.ReadInt16();
-			bb.ReadInt32();
-			bb.ReadBoolean();
-			bb.ReadBoolean();
-			bb.ReadInt32();
-			bb.ReadInt16();
-			if (version < 18)
-				bb.ReadBits(32);
-			else
-			{
-				bb.ReadInt32();
-				bb.ReadInt32();
-				bb.ReadInt32();
-				bb.ReadInt32();
-			}
-			bb.ReadByte();
-			bb.ReadByte();
-			bb.ReadSingle();
-			bb.ReadByte();
-
-			bb.ReadString();
-			bb.ReadString();
-			bb.ReadString();
-			bb.ReadString();
-		}
-
-		private static void svc_sendtable(BitBuffer bb)
-		{
-			bb.ReadBoolean();
-			var n = (int)bb.ReadUnsignedBits(16);
-			bb.SeekBits(n);
-		}
-
-		private static void svc_classinfo(BitBuffer bb)
-		{
-			var n = bb.ReadBits(16);
-			var cc = bb.ReadBoolean();
-			if (!cc)
-				while (n-- > 0)
-				{
-					bb.ReadBits((int)Math.Log(n, 2) + 1);
-					bb.ReadString();
-					bb.ReadString();
-				}
-		}
-
-		private static void svc_setpause(BitBuffer bb)
-		{
-			bb.ReadBoolean();
-		}
-
-		private static void svc_createstringtable(BitBuffer bb)
-		{
-			bb.ReadString(); // table name;
-			var m = bb.ReadBits(16); // max entries
-			bb.SeekBits((int)Math.Log(m, 2) + 1);
-			var n = bb.ReadBits(20); // Length in bits
-			var f = bb.ReadBoolean(); // fixed size?
-			if (f)
-			{
-				bb.ReadBits(12); // size
-				bb.ReadBits(4); // bits
-			}
-
-			bb.ReadBoolean(); // compressed
-			bb.SeekBits(n);
-		}
-
-		private static void svc_updatestringtable(BitBuffer bb)
-		{
-			bb.ReadBits(5);
-			var sound = (bb.ReadBoolean() ? bb.ReadBits(16) : 1);
-			var b = (int)bb.ReadUnsignedBits(20);
-			bb.SeekBits(b);
-		}
-
-		private static void svc_voiceinit(BitBuffer bb)
-		{
-			bb.ReadString();
-			bb.ReadBits(8);
-		}
-
-		private static void svc_voicedata(BitBuffer bb)
-		{
-			bb.ReadBits(8);
-			bb.ReadBits(8);
-			var b = (int)bb.ReadUnsignedBits(16);
-			bb.SeekBits(b);
-		}
-
-		private static void svc_sounds(BitBuffer bb)
-		{
-			var r = bb.ReadBoolean();
-			var sounds = r ? 1 : bb.ReadBits(8);
-			var b = r ? (int)bb.ReadUnsignedBits(8) : (int)bb.ReadUnsignedBits(16);
-			bb.SeekBits(b);
-		}
-
-		private static bool is_sound_reliable(BitBuffer bb)
+		private static bool IsSoundReliable(BitBuffer bb)
 		{
 			var r = bb.ReadBoolean();
 			var sounds = r ? 1 : bb.ReadBits(8);
@@ -452,67 +238,12 @@ namespace DemoSplicer
 			return r;
 		}
 
-
-		private static void svc_setview(BitBuffer bb)
-		{
-			bb.ReadBits(11);
-		}
-
-		private static void svc_fixangle(BitBuffer bb)
-		{
-			bb.ReadBoolean();
-			bb.ReadInt16();
-			bb.ReadInt16();
-			bb.ReadInt16();
-		}
-
-		private static void svc_crosshairangle(BitBuffer bb)
-		{
-			bb.ReadInt16();
-			bb.ReadInt16();
-			bb.ReadInt16();
-		}
-
-		private static void svc_bspdecal(BitBuffer bb)
-		{
-			var pos = bb.ReadVectorCoord();
-			bb.ReadBits(9);
-			if (bb.ReadBoolean())
-			{
-				bb.ReadBits(11);
-				bb.ReadBits(12);
-			}
-			bb.ReadBoolean();
-		}
-
-		private static void svc_usermessage(BitBuffer bb)
-		{
-			bb.ReadBits(8);
-			var b = (int)bb.ReadUnsignedBits(11);
-			bb.SeekBits(b);
-		}
-
-		private static void svc_entitymessage(BitBuffer bb)
-		{
-			bb.ReadUnsignedBits(MAX_EDICT_BITS);
-			bb.ReadBits(MAX_SERVER_CLASS_BITS);
-			var b = (int)bb.ReadUnsignedBits(11);
-			bb.SeekBits(b);
-		}
-
-		private static void svc_gameevent(BitBuffer bb)
-		{
-			var b = (int)bb.ReadUnsignedBits(11);
-			bb.SeekBits(b);
-		}
-
 		public static void WriteDeleterPacket(BinaryWriter writer, int tick)
 		{
 			// Packet stuff
 			writer.Write((byte)ParsedDemo.MessageType.Packet);
 			writer.Write(tick);
 			writer.Write(new byte[0x54]);
-			
 
 			// svc_packetentities
 			var bw2 = new BitWriterDeluxe();
@@ -545,20 +276,7 @@ namespace DemoSplicer
 			return bw;
 		}
 
-		private static void svc_packetentities(BitBuffer bb)
-		{
-			bb.ReadBits(MAX_EDICT_BITS);
-			var isDelta = bb.ReadBoolean();
-			if (isDelta)
-				bb.ReadInt32();
-			bb.ReadBoolean(); // Is baseline?
-			bb.ReadBits(MAX_EDICT_BITS);
-			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
-			bb.ReadBoolean();
-			bb.SeekBits(b);
-		}
-
-		private static int delta_from(BitBuffer bb)
+		private static int DeltaFrom(BitBuffer bb)
 		{
 			bb.ReadBits(MAX_EDICT_BITS);
 			var isDelta = bb.ReadBoolean();
@@ -574,43 +292,23 @@ namespace DemoSplicer
 			return deltaFrom;
 		}
 
-		private static void svc_tempentities(BitBuffer bb)
+		private static bool IsDeltaBaseline(BitBuffer bb)
 		{
-			bb.ReadBits(8);
-			var b = (int)bb.ReadUnsignedBits(17);
+			bb.ReadBits(MAX_EDICT_BITS);
+			var isDelta = bb.ReadBoolean();
+			int deltaFrom = -1;
+			if (isDelta)
+				deltaFrom = bb.ReadInt32();
+			bool baseline = bb.ReadBoolean(); // Is baseline?
+			bb.ReadBits(MAX_EDICT_BITS);
+			var b = (int)bb.ReadUnsignedBits(DELTASIZE_BITS);
+			bb.ReadBoolean();
 			bb.SeekBits(b);
+
+			return baseline;
 		}
 
-		private static void svc_prefetch(BitBuffer bb)
-		{
-			bb.ReadBits(13);
-		}
 
-		private static void svc_menu(BitBuffer bb)
-		{
-			bb.ReadBits(16);
-			var b = (int)bb.ReadUnsignedBits(16);
-			bb.SeekBits(b << 3);
-		}
-
-		private static void svc_gameeventlist(BitBuffer bb)
-		{
-			bb.ReadBits(MAX_EVENT_BITS);
-			var b = (int)bb.ReadUnsignedBits(20);
-			bb.SeekBits(b);
-		}
-
-		private static void svc_getcvarvalue(BitBuffer bb)
-		{
-			bb.ReadBits(32);
-			bb.ReadString();
-		}
-
-		private static void svc_cmdkeyvalues(BitBuffer bb)
-		{
-			var b = (int)bb.ReadUnsignedBits(32);
-			bb.SeekBits(b);
-		}
 
 		public enum SignOnState : byte
 		{
@@ -633,59 +331,6 @@ namespace DemoSplicer
 		}
 
 		private delegate void MsgHandler(BitBuffer bb);
-
-		private static void WriteMessagesToFile(byte[] bytes, string fileName, bool writeIndexes)
-		{
-			using (var stream = File.Open(fileName, FileMode.Create))
-			using (var writer = new StreamWriter(stream))
-			{
-				if (writeIndexes)
-				{
-					var indexes = GetMessageIndexes(bytes);
-
-					foreach (var index in indexes)
-					{
-						writer.WriteLine("{0} : {1} : {2}", index.Key, (index.Value / 8).ToString("X"), (index.Value % 8).ToString("X"));
-					}
-				}
-
-				int bytesPerRow = 16;
-
-				for (int i = 0; i < bytes.Length; ++i)
-				{
-					if (i != 0 && i % bytesPerRow == 0)
-						writer.WriteLine();
-
-					writer.Write(bytes[i].ToString("X").PadLeft(2, '0') + " ");
-				}
-			}
-		}
-
-		private static List<KeyValuePair<int, int>> GetMessageIndexes(byte[] bytes)
-		{
-			var list = new List<KeyValuePair<int, int>>();
-			var bb = new BitBuffer(bytes);
-			try
-			{
-				while (bb.BitsLeft > 6)
-				{
-					var type = (int)bb.ReadUnsignedBits(6);
-					list.Add(new KeyValuePair<int, int>(type, bb.CurrentBit - 6));
-					MsgHandler handler;
-					if (Handlers.TryGetValue((uint)type, out handler))
-					{
-						handler(bb);
-					}
-					else
-					{
-						throw new Exception("Couldn't find handler for message type");
-					}
-				}
-			}
-			catch { }
-
-			return list;
-		}
 
 	}
 }
