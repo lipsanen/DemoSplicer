@@ -14,8 +14,7 @@ namespace DemoSplicer
 			if (args.Length < 1)
 			{
 				Console.WriteLine("Usage: DemoSplicer.exe <input file/directories> - e.g.");
-				Console.WriteLine("DemoSplicer.exe test - produces a combined demo from all the demos in the test folder.");
-				Console.WriteLine("DemoSplicer.exe time test - times all the demos in the test folder.");
+				Console.WriteLine("DemoSplicer.exe test - produces a combined demo/calculates the time from all the demos in the test folder.");
 				Console.WriteLine("The demos are ordered based on filename. The ordering is the same as the one used in explorer.");
 				return false;
 			}
