@@ -38,7 +38,7 @@ namespace DemoSplicer
 		{
 			List<string> files = new List<string>();
 
-			for (int i = 1; i < args.Count(); ++i)
+			for (int i = 0; i < args.Count(); ++i)
 			{
 				if (Directory.Exists(args[i]))
 					files.AddRange(Directory.GetFiles(args[i]).Where(a => a.EndsWith(".dem")));
@@ -56,16 +56,11 @@ namespace DemoSplicer
 		/// <returns></returns>
 		static IEnumerable<string> OrderDemos(List<string> files)
 		{
-			int temp;
+			var sorted = files.OrderBy(
+				str => str,
+				new NaturalStringComparer());
 
-			if (files.All(a => int.TryParse(Path.GetFileNameWithoutExtension(a), out temp)))
-			{
-				return files.OrderBy(a => int.Parse(Path.GetFileNameWithoutExtension(a)));
-			}
-			else
-			{
-				return files.OrderBy(a => a);
-			}
+			return sorted;
 		}
 
 		/// <summary>
@@ -104,12 +99,21 @@ namespace DemoSplicer
 		public static void DoDemoWriting(string[] args)
 		{
 			List<string> files = GetDemoFiles(args);
-			string path = args[0];
+			Console.Write("Enter output demo name: ");
+			var path = Console.ReadLine();
 			IEnumerable<string> orderedDemoFiles = OrderDemos(files);
 			List<ParsedDemo> parsedDemos = ParseDemos(orderedDemoFiles);
 
 			PrintDemoData(orderedDemoFiles, path);
 			PromptCombineDemoFiles(path, parsedDemos);
+		}
+
+		public static void DoDemoTiming(string[] args)
+		{
+			List<string> files = GetDemoFiles(args);
+			IEnumerable<string> orderedDemoFiles = OrderDemos(files);
+			List<ParsedDemo> parsedDemos = ParseDemos(orderedDemoFiles);
+			TimeDemos(parsedDemos);
 		}
 
 		static bool TryExactDeltaMatch(List<DeltaPacket> lastFile, List<DeltaPacket> currentFile, DemoWriteInfo lastWriteInfo, DemoWriteInfo info)
@@ -230,6 +234,17 @@ namespace DemoSplicer
 			}
 
 			return total;
+		}
+
+		static void TimeDemos(List<ParsedDemo> files)
+		{
+			var curSegment = SegmentData.FirstSegment;
+
+			for(int i=0; i < files.Count; ++i)
+			{
+				curSegment = files[i].GetSegmentData(curSegment);
+				curSegment.Print();
+			}
 		}
 
 		static void CombineDemos(string path, List<ParsedDemo> files)

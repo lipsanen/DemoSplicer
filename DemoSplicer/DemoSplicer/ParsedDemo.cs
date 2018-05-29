@@ -21,6 +21,30 @@ namespace DemoSplicer
 		public int DeltaFrom;
 	}
 
+	public struct SegmentData
+	{
+		public int LastTick;
+		public int TickCount;
+		public int NormalTiming;
+		public string Map;
+		public string FileName;
+		public int TimingDiff { get { return TickCount - NormalTiming; }}
+
+
+		public void Print()
+		{
+			Console.WriteLine("{0} - Real timing : {1} - Difference : {2}", FileName, TickCount, TimingDiff);
+		}
+
+		public static SegmentData FirstSegment
+		{
+			get
+			{
+				return new SegmentData { Map = "asdf" };
+			}
+		}
+	}
+
 	public class DemoWriteInfo
 	{
 		/// <summary>
@@ -318,6 +342,95 @@ namespace DemoSplicer
 			return count;
 		}
 
+		private int GetFirstServerTick()
+		{
+			for (int i = 0; i < Info.Messages.Count; ++i)
+			{
+				var msg = Info.Messages[i];
+				if (msg.Type == MessageType.Packet || msg.Type == MessageType.Signon)
+				{
+					int tick = Packet.FindTick(Info, msg.Data);
+
+					if (tick != -1)
+						return tick;
+				}
+			}
+
+			throw new Exception(string.Format("Unable to find a tick in demo {0}.", fileName));
+		}
+
+		private int GetLastServerTick()
+		{
+			int tick = -1;
+			int lastTick = int.MaxValue;
+
+			for (int i = 0; i < Info.Messages.Count; ++i)
+			{
+				var msg = Info.Messages[i];
+
+				if (msg.Tick > lastTick)
+					break;
+				else if(msg.IsSegmentFlag)
+				{
+					lastTick = msg.Tick;
+				}
+				else if (msg.Type == MessageType.Packet || msg.Type == MessageType.Signon)
+				{
+					int newTick = Packet.FindTick(Info, msg.Data);
+
+					if (newTick != -1)
+						tick = newTick;
+				}
+			}
+
+			if(tick == -1)
+				throw new Exception(string.Format("Unable to find a tick in demo {0}.", fileName));
+
+			return tick;
+		}
+
+		private int GetNormalTiming()
+		{
+			int max = 0;
+
+			for (int i = 0; i < Info.Messages.Count; ++i)
+			{
+				var msg = Info.Messages[i];
+				if (msg.IsSegmentFlag)
+				{
+					return msg.Tick;
+				}
+				else if (msg.Type == MessageType.Packet || msg.Type == MessageType.Signon)
+				{
+					if(msg.Tick > max)
+						max = msg.Tick;
+				}
+			}
+
+			return max;
+		}
+
+
+		public SegmentData GetSegmentData(SegmentData data)
+		{
+			SegmentData newData = new SegmentData { Map = Info.MapName, FileName = fileName };
+			int startTick = GetFirstServerTick();
+			newData.LastTick = GetLastServerTick();
+			int lastSeg;
+
+			if (data.Map == newData.Map)
+				lastSeg = data.LastTick;
+			else
+			{
+				lastSeg = startTick - 1;
+			}
+
+			newData.TickCount = newData.LastTick - lastSeg;
+			newData.NormalTiming = GetNormalTiming();
+
+			return newData;
+		}
+
 		public int Ticks(int startTick, int lastTick)
 		{
 			int curTick = startTick;
@@ -488,6 +601,14 @@ namespace DemoSplicer
 			{
 				Info = info;
 				Type = type;
+			}
+
+			public bool IsSegmentFlag
+			{
+				get
+				{
+					return Type == MessageType.ConsoleCmd && ASCIIEncoding.ASCII.GetString(Data).Contains("#SAVE#");
+				}
 			}
 
 			public bool IsMovementPacket(int netProtocol)

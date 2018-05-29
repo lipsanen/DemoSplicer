@@ -11,12 +11,12 @@ namespace DemoSplicer
 	{
 		static bool ArgsValid(string[] args)
 		{
-			if (args.Length < 2)
+			if (args.Length < 1)
 			{
-				Console.WriteLine("Usage: DemoSplicer.exe <output file> <input file/directories> - e.g.");
-				Console.WriteLine("DemoSplicer.exe test.dem test - produces a combined demo from all the demos in the test folder.");
-				Console.WriteLine("If all filenames are numbers, number ordering is used.");
-				Console.WriteLine("If not, alphabetic ordering is used.");
+				Console.WriteLine("Usage: DemoSplicer.exe <input file/directories> - e.g.");
+				Console.WriteLine("DemoSplicer.exe test - produces a combined demo from all the demos in the test folder.");
+				Console.WriteLine("DemoSplicer.exe time test - times all the demos in the test folder.");
+				Console.WriteLine("The demos are ordered based on filename. The ordering is the same as the one used in explorer.");
 				return false;
 			}
 
@@ -42,8 +42,24 @@ namespace DemoSplicer
 			if (!ArgsValid(args))
 				return;
 
-			Splicer.DoDemoWriting(args);
-			//Test.TestBitWriting();
+			Console.WriteLine("Time(t) demos or splice(s) demos?");
+			var input = Console.ReadLine();
+
+			switch(input)
+			{
+				case "t":
+					Splicer.DoDemoTiming(args);
+					break;
+				case "s":
+					Splicer.DoDemoWriting(args);
+					break;
+				default:
+					Console.WriteLine("Invalid task.");
+					break;
+			}
+
+			Console.WriteLine("Press any key(or Enter) to exit");
+			Console.ReadKey();
 		}
 	}
 }
