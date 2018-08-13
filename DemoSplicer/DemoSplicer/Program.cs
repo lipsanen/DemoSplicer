@@ -41,22 +41,7 @@ namespace DemoSplicer
 			if (!ArgsValid(args))
 				return;
 
-			Console.WriteLine("Time(t) demos or splice(s) demos?");
-			var input = Console.ReadLine();
-
-			switch(input)
-			{
-				case "t":
-					Splicer.DoDemoTiming(args);
-					break;
-				case "s":
-					Splicer.DoDemoWriting(args);
-					break;
-				default:
-					Console.WriteLine("Invalid task.");
-					break;
-			}
-
+			Splicer.DoDemoWriting(args);
 			Console.WriteLine("Press any key(or Enter) to exit");
 			Console.ReadKey();
 		}

@@ -378,7 +378,7 @@ namespace DemoSplicer
 				{
 					int newTick = Packet.FindTick(Info, msg.Data);
 
-					if (newTick != -1)
+					if (newTick > tick)
 						tick = newTick;
 				}
 			}
@@ -411,22 +411,25 @@ namespace DemoSplicer
 		}
 
 
-		public SegmentData GetSegmentData(SegmentData data)
+		public SegmentData GetSegmentData(SegmentData oldData)
 		{
 			SegmentData newData = new SegmentData { Map = Info.MapName, FileName = fileName };
 			int startTick = GetFirstServerTick();
 			newData.LastTick = GetLastServerTick();
-			int lastSeg;
+			newData.NormalTiming = GetNormalTiming();
 
-			if (data.Map == newData.Map)
-				lastSeg = data.LastTick;
+			if (oldData.Map == newData.Map)
+			{
+				newData.TickCount = newData.NormalTiming + (startTick - oldData.LastTick);
+			}
 			else
 			{
-				lastSeg = startTick - 1;
+				newData.TickCount = newData.NormalTiming;
 			}
 
-			newData.TickCount = newData.LastTick - lastSeg;
-			newData.NormalTiming = GetNormalTiming();
+			if (newData.TickCount == 0)
+				newData.TickCount = 1;
+
 
 			return newData;
 		}
